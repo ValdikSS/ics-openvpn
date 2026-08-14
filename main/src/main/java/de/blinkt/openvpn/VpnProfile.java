@@ -494,7 +494,51 @@ public class VpnProfile implements Serializable, Cloneable {
             if (canUsePlainRemotes) {
                 for (Connection conn : mConnections) {
                     if (conn.mEnabled) {
-                        cfg.append(conn.getConnectionBlock(configForOvpn3));
+                        // For OpenVPN 3, http-proxy cannot be scoped per-remote when using plain
+                        // remote directives (not <connection> blocks). Emit remotes without proxy
+                        // here; a shared global proxy is emitted below if applicable.
+                        cfg.append(conn.getConnectionBlock(configForOvpn3, !configForOvpn3));
+                    }
+                }
+
+                if (configForOvpn3) {
+                    // OpenVPN 3 does not support http-proxy inside <connection> blocks and has no
+                    // management interface for per-remote proxy queries. Emit a single global proxy
+                    // only when ALL enabled connections share exactly the same proxy configuration.
+                    // If any connection differs — including having NONE vs non-NONE proxy — no
+                    // global proxy is emitted, preventing proxy leakage across remotes.
+                    Connection sharedProxy = null;
+                    boolean proxyConsistent = true;
+                    boolean hasNoneProxy = false;
+                    boolean hasNonNoneProxy = false;
+                    for (Connection conn : mConnections) {
+                        if (!conn.mEnabled) continue;
+                        if (conn.mProxyType == Connection.ProxyType.NONE) {
+                            hasNoneProxy = true;
+                        } else {
+                            hasNonNoneProxy = true;
+                            if (sharedProxy == null) {
+                                sharedProxy = conn;
+                            } else if (conn.mProxyType != sharedProxy.mProxyType
+                                    || !conn.mProxyName.equals(sharedProxy.mProxyName)
+                                    || !conn.mProxyPort.equals(sharedProxy.mProxyPort)) {
+                                proxyConsistent = false;
+                                break;
+                            }
+                        }
+                    }
+                    // Only emit global proxy when every enabled connection agrees on the same
+                    // non-NONE proxy. Mixed NONE/non-NONE means we cannot apply any global proxy.
+                    if (sharedProxy != null && proxyConsistent && !hasNoneProxy) {
+                        if (sharedProxy.mProxyType == Connection.ProxyType.HTTP) {
+                            cfg.append(String.format(Locale.US, "http-proxy %s %s\n",
+                                    sharedProxy.mProxyName, sharedProxy.mProxyPort));
+                            if (sharedProxy.mUseProxyAuth) {
+                                cfg.append(String.format(Locale.US,
+                                        "<http-proxy-user-pass>\n%s\n%s\n</http-proxy-user-pass>\n",
+                                        sharedProxy.mProxyAuthUser, sharedProxy.mProxyAuthPassword));
+                            }
+                        }
                     }
                 }
             }
