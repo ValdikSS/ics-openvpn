@@ -38,6 +38,10 @@ public class Connection implements Serializable, Cloneable {
 
 
     public String getConnectionBlock(boolean isOpenVPN3) {
+        return getConnectionBlock(isOpenVPN3, true);
+    }
+
+    public String getConnectionBlock(boolean isOpenVPN3, boolean includeProxy) {
         String cfg = "";
 
         // Server Address
@@ -53,15 +57,17 @@ public class Connection implements Serializable, Cloneable {
         if (mConnectTimeout != 0)
             cfg += String.format(Locale.US, " connect-timeout  %d\n", mConnectTimeout);
 
-        // OpenVPN 2.x manages proxy connection via management interface
-        if ((isOpenVPN3 || usesExtraProxyOptions()) && mProxyType == ProxyType.HTTP)
-        {
-            cfg+=String.format(Locale.US,"http-proxy %s %s\n", mProxyName, mProxyPort);
-            if (mUseProxyAuth)
-                cfg+=String.format(Locale.US, "<http-proxy-user-pass>\n%s\n%s\n</http-proxy-user-pass>\n", mProxyAuthUser, mProxyAuthPassword);
-        }
-        if (usesExtraProxyOptions() && mProxyType == ProxyType.SOCKS5) {
-            cfg+=String.format(Locale.US,"socks-proxy %s %s\n", mProxyName, mProxyPort);
+        if (includeProxy) {
+            // OpenVPN 2.x manages proxy connection via management interface
+            if ((isOpenVPN3 || usesExtraProxyOptions()) && mProxyType == ProxyType.HTTP)
+            {
+                cfg+=String.format(Locale.US,"http-proxy %s %s\n", mProxyName, mProxyPort);
+                if (mUseProxyAuth)
+                    cfg+=String.format(Locale.US, "<http-proxy-user-pass>\n%s\n%s\n</http-proxy-user-pass>\n", mProxyAuthUser, mProxyAuthPassword);
+            }
+            if (usesExtraProxyOptions() && mProxyType == ProxyType.SOCKS5) {
+                cfg+=String.format(Locale.US,"socks-proxy %s %s\n", mProxyName, mProxyPort);
+            }
         }
 
         if (!TextUtils.isEmpty(mCustomConfiguration) && mUseCustomConfig) {
